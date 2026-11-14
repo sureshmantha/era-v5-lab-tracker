@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab Progress Tracker</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e4e3de; --soft: #f0efea;
+  --accent: #3b5bdb; --accent-soft: #e7ecff;
+  --green: #2f8a4a; --green-soft: #e3f3e7; --amber: #b07015; --amber-soft: #fbf0dc; --red: #c43d3d; --red-soft: #fbe5e5;
+  --heat: 59, 91, 219;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1c1c1a; --ink: #ecebe6; --muted: #9a9993; --line: #2e2e2b; --soft: #242422;
+    --accent: #8ea2ff; --accent-soft: #232a45;
+    --green: #5cc27a; --green-soft: #1c3324; --amber: #e0a24a; --amber-soft: #3a2c16; --red: #ef7a7a; --red-soft: #3d1f1f;
+    --heat: 142, 162, 255;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1c1c1a; --ink: #ecebe6; --muted: #9a9993; --line: #2e2e2b; --soft: #242422;
+  --accent: #8ea2ff; --accent-soft: #232a45;
+  --green: #5cc27a; --green-soft: #1c3324; --amber: #e0a24a; --amber-soft: #3a2c16; --red: #ef7a7a; --red-soft: #3d1f1f;
+  --heat: 142, 162, 255;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+.app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+nav { border-right: 1px solid var(--line); padding: 16px 10px; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--panel); }
+nav .brand { font-weight: 650; padding: 4px 10px 2px; }
+nav .sub { color: var(--muted); font-size: 12px; padding: 0 10px 12px; }
+nav a { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 7px; color: var(--ink); }
+nav a:hover { background: var(--soft); text-decoration: none; }
+nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav .sep { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 14px 10px 4px; }
+nav .n { margin-left: auto; color: var(--muted); font-size: 12px; }
+main { padding: 24px 32px 64px; max-width: 1240px; min-width: 0; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; } h2 { font-size: 16px; margin: 28px 0 10px; font-weight: 650; }
+h3 { font-size: 14px; margin: 0 0 8px; font-weight: 650; }
+.lede { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.grid { display: grid; gap: 12px; }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.notes { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.kpi .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi .l { color: var(--muted); font-size: 12px; }
+.two { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.halves { grid-template-columns: 1fr 1fr; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.green { --c: var(--green); --cs: var(--green-soft); } .amber { --c: var(--amber); --cs: var(--amber-soft); } .red { --c: var(--red); --cs: var(--red-soft); }
+.dot.green, .dot.amber, .dot.red { background: var(--c); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px; border-radius: 99px; font-size: 12px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.pill.green, .pill.amber, .pill.red { background: var(--cs); color: var(--c); font-weight: 600; }
+.st-done { background: var(--green-soft); color: var(--green); } .st-review { background: var(--accent-soft); color: var(--accent); }
+.st-late { background: var(--red-soft); color: var(--red); } .st-todo { background: var(--soft); color: var(--muted); }
+.st-open { background: var(--accent-soft); color: var(--accent); } .st-merged { background: var(--green-soft); color: var(--green); } .st-closed { background: var(--soft); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.scroll { overflow-x: auto; }
+.muted { color: var(--muted); } .small { font-size: 12px; }
+ul.tight { margin: 0; padding-left: 18px; } ul.tight li { margin: 3px 0; }
+.pipeline { display: flex; gap: 0; overflow-x: auto; padding: 4px 0 8px; }
+.stage { flex: 1 0 112px; position: relative; padding-right: 14px; }
+.stage:not(:last-child)::after { content: ""; position: absolute; right: 2px; top: 22px; border: 6px solid transparent; border-left-color: var(--muted); }
+.stage .box { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); padding: 8px; min-height: 92px; }
+.stage .sn { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.chip { display: flex; align-items: center; gap: 6px; padding: 4px 7px; margin: 3px 0; border-radius: 6px; background: var(--soft); color: var(--ink); font-size: 12.5px; }
+.chip:hover { text-decoration: none; outline: 1px solid var(--accent); }
+.chip.mine { outline: 1.5px solid var(--accent); }
+.heat td.c { text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; min-width: 44px; border-bottom: 2px solid var(--panel); border-right: 2px solid var(--panel); }
+.matrix td.c { width: 28px; height: 26px; text-align: center; font-size: 11px; padding: 0; border: 1px solid var(--panel); }
+.matrix td.k { outline: 2px solid var(--amber); outline-offset: -2px; }
+.matrix th.r { text-align: right; }
+.byte { border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 8px 8px 0; margin: 10px 0; }
+.byte b { color: var(--accent); }
+details { margin-top: 10px; } summary { cursor: pointer; color: var(--accent); }
+.md { line-height: 1.6; } .md table { margin: 8px 0; } .md pre { background: var(--soft); padding: 10px; border-radius: 8px; overflow-x: auto; }
+.md h1 { font-size: 18px; } .md h2 { font-size: 15px; } .md h3 { font-size: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+input[type=search], select { font: inherit; padding: 5px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.seg button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 4px 10px; cursor: pointer; }
+.seg button:first-child { border-radius: 7px 0 0 7px; } .seg button:last-child { border-radius: 0 7px 7px 0; } .seg button + button { border-left: 0; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.step { display: grid; grid-template-columns: 40px 1fr; gap: 14px; margin-bottom: 14px; }
+.step .num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 650; }
+.prompt { font-family: var(--mono); font-size: 12px; background: var(--soft); padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; position: relative; }
+.prompt button { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 11px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; cursor: pointer; padding: 2px 8px; }
+.cols3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.bar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; } .bar i { display: block; height: 100%; background: var(--green); }
+svg text { fill: var(--muted); font: 11px var(--sans); }
+.theme { margin: 14px 10px 0; font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.menu { display: none; }
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  nav { position: static; height: auto; display: none; } nav.open { display: block; }
+  .menu { display: inline-block; margin: 12px 16px 0; font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 12px; }
+  main { padding: 16px; }
+  .two, .halves, .cols3 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<button class="menu" onclick="document.querySelector('nav').classList.toggle('open')">Menu</button>
+<div class="app">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+<script>
+const D = /*__DATA__*/null;
+const T = D.teams, TIDS = Object.keys(T).sort();
+const PR = Object.fromEntries(D.prs.map(p => [p.n, p]));
+const TASK = Object.fromEntries(D.tasks.map(t => [String(t.id), t]));
+const GH = `https://github.com/${D.repo}`;
+const NOW = new Date(D.generated);
+const RAGTXT = { green: "on track", amber: "watch", red: "needs help" };
+const STXT = { done: "done", review: "in review", late: "late", todo: "to do" };
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fileLink = p => `<a href="${GH}/blob/main/${encodeURI(p)}" target="_blank" rel="noopener"><code>${esc(p.replace(/^teams\/[^/]+\//, ""))}</code></a>`;
+const prLink = n => PR[n] ? `<a href="${PR[n].url}" target="_blank" rel="noopener" title="${esc(PR[n].title)}">#${n}</a>` : `#${n}`;
+const teamLabel = id => T[id] ? `${T[id].short} ${esc(T[id].name)}` : id === "diag" ? "Diagnosis" : "Lab";
+const ago = iso => { if (!iso) return ""; const h = (NOW - new Date(iso)) / 36e5; return h < 1 ? "now" : h < 48 ? `${Math.round(h)} h ago` : `${Math.round(h / 24)} d ago`; };
+const hours = h => h == null ? "–" : h < 48 ? `${Math.round(h)} h` : `${(h / 24).toFixed(1)} d`;
+const pill = (cls, txt) => `<span class="pill ${cls}">${txt}</span>`;
+const rag = id => T[id].signals.rag;
+const stageOf = id => (D.stages.find(s => s.teams.includes(id)) || {});
+const glossFor = id => (D.learn.glossary || []).filter(g => g.team === id);
+
+// ---------- tiny markdown (headings, lists, tables, code, links, bold)
+function md(src) {
+  const lines = String(src || "").split("\n"); let out = [], i = 0;
+  const inline = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => `<a href="${/^https?:/.test(u) ? u : "#"}" target="_blank" rel="noopener">${t}</a>`);
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^```/.test(l)) { const b = []; i++; while (i < lines.length && !/^```/.test(lines[i])) b.push(esc(lines[i++])); i++; out.push(`<pre>${b.join("\n")}</pre>`); continue; }
+    const h = l.match(/^(#{1,4})\s+(.*)/); if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^\s*\|/.test(l)) { const rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      const body = rows.filter(r => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      out.push(`<div class="scroll"><table><thead><tr>${cells(body[0]).map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${body.slice(1).map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`); continue; }
+    if (/^\s*([-*]|\d+\.)\s+/.test(l)) { const it = []; while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) it.push(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, "")); out.push(`<ul class="tight">${it.map(x => `<li>${inline(x)}</li>`).join("")}</ul>`); continue; }
+    if (/^>\s?/.test(l)) { const q = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, "")); out.push(`<div class="byte">${inline(q.join(" "))}</div>`); continue; }
+    if (l.trim()) { const p = []; while (i < lines.length && lines[i].trim() && !/^(#|```|\s*\||\s*[-*]\s|>)/.test(lines[i])) p.push(lines[i++]); out.push(`<p>${inline(p.join(" "))}</p>`); continue; }
+    i++;
+  }
+  return out.join("");
+}
+
+// ---------- shared pieces
+function prTable(list, opts = {}) {
+  if (!list.length) return `<p class="muted small">None.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>PR</th><th>Title</th>${opts.team ? "<th>Team</th>" : ""}<th>Author</th><th>State</th><th class="num">Age</th><th class="num">Files</th><th class="num">Comments</th>${D.reviews ? "<th>Review</th>" : ""}</tr></thead><tbody>${
+    list.map(p => `<tr><td>${prLink(p.n)}</td><td>${esc(p.title)}${p.draft ? ` ${pill("", "draft")}` : ""}${p.teams.includes("diag") && p.teams.some(x => T[x]) ? ` ${pill("amber", "mixes diagnosis and team files")}` : ""}${p.last_comment ? `<div class="small muted">${esc(p.last_comment.by)}: ${esc(p.last_comment.text.slice(0, 140))}</div>` : ""}</td>${opts.team ? `<td class="small">${p.teams.map(teamLabel).join(", ")}</td>` : ""}<td class="small">${esc(p.author)}</td><td>${pill("st-" + p.state, p.state)}</td><td class="num ${p.state === "open" && p.age_h > 72 ? "" : "muted"}" style="${p.state === "open" && p.age_h > 72 ? "color:var(--red)" : ""}">${hours(p.age_h)}</td><td class="num">${p.nfiles}</td><td class="num">${p.comments}</td>${D.reviews ? `<td class="small">${esc((p.review || "").toLowerCase().replace("_", " "))}</td>` : ""}</tr>`).join("")
+  }</tbody></table></div>`;
+}
+function taskTable(ids, showTeam) {
+  const list = ids.map(i => TASK[i]).filter(Boolean).sort((a, b) => (a.week || 0) - (b.week || 0) || String(a.due).localeCompare(String(b.due)));
+  if (!list.length) return `<p class="muted small">No planned tasks yet. Add this team's tasks from the lab plan sheet to <code>tracker/plan.yaml</code>; PR titles such as "week 2 task 3" are picked up on their own.</p>`;
+  return `<div class="scroll"><table><thead><tr><th>Wk</th>${showTeam ? "<th>Team</th>" : ""}<th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th>PRs</th></tr></thead><tbody>${
+    list.map(t => `<tr><td class="num">${t.week ?? ""}</td>${showTeam ? `<td class="small"><a href="#/team/${t.team}">${T[t.team].short}</a></td>` : ""}<td>${esc(t.title)}${t.path ? `<div class="small">${fileLink(t.path)}</div>` : ""}${t.needs ? `<div class="small muted">needs: ${esc(t.needs)}</div>` : ""}${t.source !== "plan" ? `<div class="small muted">from the PR title</div>` : ""}</td><td class="small">${esc(t.owner || "")}</td><td class="small mono">${esc(t.due || "")}</td><td>${pill("st-" + t.status, STXT[t.status])}</td><td class="small">${[...t.open_prs, ...t.merged_prs].map(prLink).join(" ")}</td></tr>`).join("")
+  }</tbody></table></div>`;
+}
+function weeklyBars(t) {
+  const ws = Object.keys(t.weekly).map(Number).filter(w => w >= 1);
+  const max = Math.max(1, ...ws.map(w => Math.max(t.weekly[w].opened, t.weekly[w].merged)));
+  const W = 46, H = 90;
+  const bars = ws.map((w, k) => { const o = t.weekly[w].opened, m = t.weekly[w].merged, x = 30 + k * W;
+    return `<rect x="${x}" y="${H - o / max * 70}" width="14" height="${o / max * 70}" rx="2" fill="rgba(var(--heat),.35)"><title>week ${w}: ${o} opened</title></rect>
+      <rect x="${x + 16}" y="${H - m / max * 70}" width="14" height="${m / max * 70}" rx="2" fill="var(--green)"><title>week ${w}: ${m} merged</title></rect>
+      <text x="${x + 15}" y="${H + 14}" text-anchor="middle">w${w}</text><text x="${x + 7}" y="${H - o / max * 70 - 3}" text-anchor="middle">${o || ""}</text><text x="${x + 23}" y="${H - m / max * 70 - 3}" text-anchor="middle">${m || ""}</text>`; }).join("");
+  return `<svg viewBox="0 0 ${40 + ws.length * W} ${H + 22}" width="${40 + ws.length * W}" height="${H + 22}" role="img" aria-label="PRs opened and merged per week">${bars}<line x1="24" x2="${32 + ws.length * W}" y1="${H}" y2="${H}" stroke="var(--line)"/></svg>
+    <div class="small muted"><span class="dot" style="background:rgba(var(--heat),.35)"></span> opened &nbsp; <span class="dot" style="background:var(--green)"></span> merged</div>`;
+}
+
+// ---------- pages
+function overview() {
+  const prs = D.prs, open = prs.filter(p => p.state === "open");
+  const merged7 = prs.filter(p => p.merged && NOW - new Date(p.merged) < 7 * 864e5);
+  const count = c => TIDS.filter(id => rag(id) === c).length;
+  const planned = D.tasks.filter(t => t.source === "plan");
+  const wk = D.weeks[D.this_week] || {};
+  const stale = open.filter(p => p.age_h > 72 && !p.teams.includes("diag")).sort((a, b) => b.age_h - a.age_h);
+  const quiet = open.filter(p => p.comments === 0 && p.age_h > 24 && !p.teams.includes("diag"));
+  const crossTeam = open.filter(p => p.teams.filter(x => T[x]).length > 1);
+  const mixed = open.filter(p => p.teams.includes("diag") && p.teams.some(x => T[x]));
+  const best = [...TIDS].sort((a, b) => T[b].signals.merged7 - T[a].signals.merged7).slice(0, 3).filter(id => T[id].signals.merged7);
+  const lat = prs.filter(p => p.state === "merged" && !p.teams.includes("diag")).map(p => p.age_h).sort((a, b) => a - b);
+  const medLat = lat.length ? lat[Math.floor(lat.length / 2)] : null;
+  const silent = TIDS.filter(id => !D.prs.some(p => p.teams.includes(id) && p.week === D.this_week));
+  const maxWeek = Math.max(1, D.this_week);
+  const weeks = Array.from({ length: maxWeek }, (_, k) => k + 1);
+  const maxHeat = Math.max(1, ...TIDS.flatMap(id => weeks.map(w => (T[id].weekly[w] || {}).merged || 0)));
+
+  // dependency matrix: rows = team that mentions, columns = team mentioned
+  const kset = new Set(D.contracts.map(c => c.to + ">" + c.from));
+  const maxRef = Math.max(1, ...TIDS.flatMap(a => Object.values(T[a].refs_out)));
+  const matrix = `<div class="scroll"><table class="matrix" style="width:auto"><thead><tr><th></th>${TIDS.map(b => `<th title="${esc(T[b].name)}" class="num">${T[b].short}</th>`).join("")}</tr></thead><tbody>${
+    TIDS.map(a => `<tr><th class="r"><a href="#/team/${a}">${T[a].short}</a></th>${TIDS.map(b => { const v = T[a].refs_out[b] || 0, k = kset.has(a + ">" + b);
+      return `<td class="c ${k ? "k" : ""}" style="background:rgba(var(--heat),${a === b ? 0 : (v ? .12 + .8 * Math.sqrt(v / maxRef) : 0)});color:${v / maxRef > .35 ? "var(--panel)" : "var(--ink)"}" title="${T[a].short} mentions ${T[b].short} ${v} times${k ? " · planned contract" : ""}">${a === b ? "·" : (v || "")}</td>`; }).join("")}</tr>`).join("")
+  }</tbody></table></div>`;
+
+  return `<h1>${esc(D.lab.name)}: how every team is moving</h1>
+  <p class="lede">${esc(D.lab.goal)}</p>
+  <div class="grid kpis">
+    <div class="card kpi"><div class="l">This week</div><div class="v">Week ${D.this_week}</div><div class="small muted">${esc(wk.theme || "")}</div></div>
+    <div class="card kpi"><div class="l">Open PRs (teams)</div><div class="v">${open.filter(p => !p.teams.includes("diag")).length}</div><div class="small muted">${stale.length} past the 3-day rule · ${open.length} incl. diagnosis</div></div>
+    <div class="card kpi"><div class="l">Merged, last 7 days</div><div class="v">${merged7.length}</div><div class="small muted">median merge time ${hours(medLat)}</div></div>
+    <div class="card kpi"><div class="l">Teams</div><div class="v"><span style="color:var(--green)">${count("green")}</span> · <span style="color:var(--amber)">${count("amber")}</span> · <span style="color:var(--red)">${count("red")}</span></div><div class="small muted">on track · watch · needs help</div></div>
+    <div class="card kpi"><div class="l">Planned tasks done</div><div class="v">${planned.filter(t => t.status === "done").length} / ${planned.length}</div><div class="small muted">${planned.filter(t => t.status === "late").length} late</div></div>
+    <div class="card kpi"><div class="l">Diagnosis PRs</div><div class="v">${D.diag.merged}</div><div class="small muted">merged · ${D.diag.open} open</div></div>
+  </div>
+  ${wk.gate ? `<div class="byte"><b>Gate this week.</b> ${esc(wk.gate)}</div>` : ""}
+
+  <h2>The pipeline: from raw text to a released model</h2>
+  <p class="lede small">Each box is a stage of building a model, in order. Each chip is a team; its colour is its status. A team is late when work it depends on (to the left) is late too, so read problems from left to right.</p>
+  <div class="pipeline">${D.stages.map(s => `<div class="stage"><div class="box"><div class="sn">${esc(s.name)}</div>${s.teams.filter(id => T[id]).map(id => `<a class="chip ${T[id].mine ? "mine" : ""}" href="#/team/${id}"><span class="dot ${rag(id)}"></span>${T[id].short} ${esc(T[id].name)}</a>`).join("")}</div></div>`).join("")}</div>
+
+  <div class="grid halves" style="margin-top:12px">
+    <div class="card"><h3>What is working</h3><ul class="tight">
+      ${best.map(id => `<li><a href="#/team/${id}">${teamLabel(id)}</a>: ${T[id].signals.merged7} PRs merged this week</li>`).join("")}
+      ${medLat != null ? `<li>Team PRs merge in a median of ${hours(medLat)}</li>` : ""}
+      <li>${TIDS.filter(id => T[id].tests).length} of ${TIDS.length} teams have tests on main</li>
+      <li>Teams with a TSAI job request on main: ${TIDS.filter(id => T[id].jobs.length).map(id => `<a href="#/team/${id}">${T[id].short}</a>`).join(", ") || "none yet"}</li>
+    </ul></div>
+    <div class="card"><h3>What needs attention</h3><ul class="tight">
+      ${stale.length ? `<li>${stale.length} PRs open more than 3 days: ${stale.slice(0, 8).map(p => prLink(p.n)).join(" ")}${stale.length > 8 ? " …" : ""}</li>` : ""}
+      ${quiet.length ? `<li>${quiet.length} team PRs with no comment after a day: ${quiet.slice(0, 8).map(p => prLink(p.n)).join(" ")}</li>` : ""}
+      ${silent.length ? `<li>No PR opened this week: ${silent.map(id => `<a href="#/team/${id}">${T[id].short}</a>`).join(", ")}</li>` : ""}
+      ${mixed.length ? `<li>${mixed.length} open PRs mix a diagnosis submission with team folder files (one task, one PR): ${mixed.map(p => prLink(p.n) + " " + p.teams.filter(x => T[x]).map(x => T[x].short).join("/")).join(", ")}</li>` : ""}
+      ${crossTeam.length ? `<li>${crossTeam.length} open PRs touch more than one team folder: ${crossTeam.map(p => prLink(p.n)).join(" ")}</li>` : ""}
+      ${TIDS.filter(id => T[id].code_files && !T[id].tests).map(id => `<li><a href="#/team/${id}">${T[id].short}</a> has code but no tests</li>`).join("")}
+      ${D.tasks.filter(t => t.status === "late").map(t => `<li>Late: <a href="#/team/${t.team}">${T[t.team].short}</a> ${esc(t.title)}</li>`).join("")}
+    </ul></div>
+  </div>
+
+  <h2>Activity by week</h2>
+  <p class="lede small">PRs merged into each team folder per week (darker is more). Hover a cell for opened, merged and commits.</p>
+  <div class="card scroll"><table class="heat" style="width:auto"><thead><tr><th>Team</th>${weeks.map(w => `<th class="num">W${w}</th>`).join("")}<th class="num">Open</th><th>Status</th></tr></thead><tbody>${
+    TIDS.map(id => `<tr><td><a href="#/team/${id}">${teamLabel(id)}</a></td>${weeks.map(w => { const c = T[id].weekly[w] || { opened: 0, merged: 0, commits: 0 }; const a = c.merged / maxHeat;
+      return `<td class="c" style="background:rgba(var(--heat),${c.merged ? .1 + .85 * a : .03});color:${a > .5 ? "var(--panel)" : "var(--ink)"}" title="week ${w}: ${c.opened} opened, ${c.merged} merged, ${c.commits} commits">${c.merged || ""}</td>`; }).join("")}<td class="num">${T[id].signals.open}</td><td>${pill(rag(id), RAGTXT[rag(id)])}</td></tr>`).join("")
+  }</tbody></table></div>
+
+  <h2>Who depends on whom</h2>
+  <p class="lede small">Row team mentions column team this many times in its files on main (paths <code>teams/NN-</code>, "G<i>n</i>", "Team <i>n</i>"). An orange outline is a contract written in <code>plan.yaml</code>: the row team receives something from the column team. A planned contract with an empty cell means nobody has written down the hand-off yet.</p>
+  <div class="card">${matrix}</div>
+
+  <h2>Planned tasks across teams</h2>
+  <div class="card">${taskTable(D.tasks.filter(t => t.source === "plan").map(t => String(t.id)), true)}</div>
+
+  <h2>Recent</h2>
+  <div class="grid halves">
+    <div class="card"><h3>Merged</h3>${prTable(D.prs.filter(p => p.state === "merged" && !p.teams.includes("diag")).sort((a, b) => b.merged.localeCompare(a.merged)).slice(0, 10), { team: true })}</div>
+    <div class="card"><h3>Longest open</h3>${prTable(stale.filter(p => !p.teams.includes("diag")).slice(0, 10), { team: true })}</div>
+  </div>
+  <p class="small muted" style="margin-top:24px">Built ${esc(D.generated)} from <a href="${GH}/commit/${D.main_sha}" target="_blank">main ${D.main_sha}</a>, ${D.prs.length} PRs and ${D.issues.length} issues. ${D.reviews ? "Review states included." : "Run with GITHUB_TOKEN and --reviews for review states and last comments."}</p>`;
+}
+
+function teamPage(id) {
+  const t = T[id], s = t.signals, L = t.learn || {}, st = stageOf(id);
+  const mine = t.prs.map(n => PR[n]);
+  const filt = window.__prf || "open";
+  const shown = mine.filter(p => filt === "all" || p.state === filt).sort((a, b) => b.n - a.n);
+  const gets = D.contracts.filter(c => c.to === id), gives = D.contracts.filter(c => c.from === id);
+  const usedBy = TIDS.filter(o => (T[o].refs_out[id] || 0) > 0).sort((a, b) => T[b].refs_out[id] - T[a].refs_out[id]);
+  const issues = t.issues.map(n => D.issues.find(i => i.n === n)).filter(Boolean);
+  const done = s.tasks ? Math.round(100 * s.tasks_done / s.tasks) : 0;
+  return `<div class="small muted">${esc(st.name || "")}</div>
+  <h1>${t.short} ${esc(t.name)} ${pill(s.rag, RAGTXT[s.rag])}</h1>
+  <p class="lede">${esc(L.mission || "")} <a href="${GH}/tree/main/teams/${t.slug}" target="_blank" rel="noopener">Folder on GitHub</a></p>
+  <div class="grid kpis">
+    <div class="card kpi"><div class="l">Open PRs</div><div class="v">${s.open}</div><div class="small muted">${s.stale.length} past 3 days</div></div>
+    <div class="card kpi"><div class="l">Merged</div><div class="v">${s.merged}</div><div class="small muted">${s.merged7} in the last 7 days</div></div>
+    <div class="card kpi"><div class="l">Median time to merge</div><div class="v">${hours(s.median_merge_h)}</div><div class="small muted">${s.closed_unmerged} closed without merge</div></div>
+    <div class="card kpi"><div class="l">Planned tasks</div><div class="v">${s.tasks_done} / ${s.tasks}</div><div class="bar" style="margin-top:6px"><i style="width:${done}%"></i></div></div>
+    <div class="card kpi"><div class="l">On main</div><div class="v">${t.files}</div><div class="small muted">files · ${t.loc.toLocaleString()} lines of code · ${t.tests} tests</div></div>
+    <div class="card kpi"><div class="l">Last merge</div><div class="v" style="font-size:18px">${t.last_commit ? ago(t.last_commit.at) : "–"}</div><div class="small muted">${t.last_commit ? `<a href="${GH}/commit/${t.last_commit.sha}" target="_blank">${t.last_commit.sha}</a>` : ""}</div></div>
+  </div>
+
+  <div class="grid two" style="margin-top:12px">
+    <div>
+      <div class="card"><h3>Why the status is ${RAGTXT[s.rag]}</h3>
+        ${s.reasons.length ? `<ul class="tight">${s.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>` : `<p class="small muted">No warning signs.</p>`}
+        ${s.good.length ? `<p class="small" style="margin:8px 0 0"><b>Going well:</b> ${s.good.map(esc).join(" · ")}</p>` : ""}
+        ${s.stale.length ? `<p class="small" style="margin:6px 0 0">Past 3 days: ${s.stale.map(prLink).join(" ")}</p>` : ""}
+      </div>
+      <h2>Tasks</h2><div class="card">${taskTable(t.tasks.map(String))}</div>
+      <h2>Pull requests</h2>
+      <div class="toolbar"><div class="seg">${["open", "merged", "closed", "all"].map(f => `<button class="${f === filt ? "on" : ""}" onclick="window.__prf='${f}';route()">${f} (${f === "all" ? mine.length : mine.filter(p => p.state === f).length})</button>`).join("")}</div></div>
+      <div class="card">${prTable(shown)}</div>
+      ${issues.length ? `<h2>Issues</h2><div class="card"><table><tbody>${issues.map(i => `<tr><td><a href="${i.url}" target="_blank">#${i.n}</a></td><td>${esc(i.title)}</td><td>${pill(i.state === "open" ? "st-open" : "st-closed", i.state)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      <h2>Open items written in the team's documents</h2>
+      <div class="card">${t.open_items.length ? t.open_items.slice(0, 8).map(o => `<div style="margin-bottom:10px"><div class="small">${fileLink(o.path)} · <b>${esc(o.heading)}</b></div><ul class="tight small">${o.items.map(x => `<li>${md(x).replace(/^<p>|<\/p>$/g, "")}</li>`).join("")}</ul></div>`).join("") : `<p class="small muted">No section called Open items, Risks or Next steps was found.</p>`}
+      ${t.todos.length ? `<details><summary>${t.todos.length} TODO / FIXME comments in code</summary><ul class="tight small">${t.todos.map(x => `<li><a href="${GH}/blob/main/${x.path}#L${x.line}" target="_blank"><code>${esc(x.path.split("/").slice(2).join("/"))}:${x.line}</code></a> ${esc(x.text)}</li>`).join("")}</ul></details>` : ""}</div>
+      <h2>Documents on main</h2>
+      <div class="card scroll"><table><tbody>${t.docs.sort((a, b) => a.path.localeCompare(b.path)).slice(0, 40).map(d => `<tr><td>${fileLink(d.path)}</td><td class="small muted">${esc(d.title)}</td></tr>`).join("")}</tbody></table>${t.docs.length > 40 ? `<p class="small muted">${t.docs.length - 40} more in the folder.</p>` : ""}</div>
+      <details class="card" style="margin-top:12px"><summary>Team README</summary><div class="md">${md(t.readme)}</div></details>
+    </div>
+    <div>
+      <div class="card"><h3>Week by week</h3>${weeklyBars(t)}</div>
+      <div class="card" style="margin-top:12px"><h3>Why this team exists</h3><p class="small">${esc(L.why || "")}</p>
+        ${L.watch ? `<h3>What to watch on this page</h3><ul class="tight small">${L.watch.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}</div>
+      <div class="card" style="margin-top:12px"><h3>Hand-offs</h3>
+        ${gets.length ? `<div class="small"><b>Receives</b><ul class="tight">${gets.map(c => `<li>from <a href="#/team/${c.from}">${T[c.from].short}</a>: ${esc(c.what)}</li>`).join("")}</ul></div>` : ""}
+        ${gives.length ? `<div class="small" style="margin-top:6px"><b>Gives</b><ul class="tight">${gives.map(c => `<li>to <a href="#/team/${c.to}">${T[c.to].short}</a>: ${esc(c.what)}</li>`).join("")}</ul></div>` : ""}
+        <div class="small" style="margin-top:6px"><b>Mentions in its files</b>: ${Object.entries(t.refs_out).slice(0, 6).map(([o, v]) => `<a href="#/team/${o}">${T[o].short}</a> ${v}`).join(" · ") || "none"}</div>
+        <div class="small" style="margin-top:4px"><b>Mentioned by</b>: ${usedBy.slice(0, 6).map(o => `<a href="#/team/${o}">${T[o].short}</a> ${T[o].refs_out[id]}`).join(" · ") || "none"}</div>
+      </div>
+      ${glossFor(id).length ? `<div class="card" style="margin-top:12px"><h3>Learn the ideas</h3>${glossFor(id).map(g => `<div class="byte small"><b>${esc(g.term)}.</b> ${esc(g.byte)}</div>`).join("")}</div>` : ""}
+      ${L.redo ? `<div class="card" style="margin-top:12px"><h3>Doing it yourself with agents</h3><p class="small">${esc(L.redo)}</p><p class="small"><a href="#/runbook">The full runbook</a></p></div>` : ""}
+      ${t.jobs.length ? `<div class="card" style="margin-top:12px"><h3>TSAI job requests</h3><ul class="tight small">${t.jobs.map(j => `<li>${fileLink(j)}</li>`).join("")}</ul></div>` : ""}
+    </div>
+  </div>`;
+}
+
+function runbook() {
+  const rb = D.learn.runbook || [];
+  return `<h1>Runbook: build a small language model with agents</h1>
+  <p class="lede">The lab splits the work into ten stages and twelve teams. Doing it alone, you would give each stage to an agent, and keep the same contracts between them. Each stage below says what it takes, what it gives, the gate that proves it, and a prompt to start an agent. The status on the right is the lab's team for that stage today.</p>
+  <div class="card" style="margin-bottom:18px"><h3>How the agents fit together</h3>${agentDiagram()}
+  <p class="small muted">One orchestrator owns <code>plan.yaml</code>. Each stage agent works on its own branch and must open one PR per task. A reviewer agent checks the gate before merge. Hand-offs are files on main (a v0/v1 document plus a checker), never chat messages. This tracker is the orchestrator's view.</p></div>
+  ${rb.map((r, k) => { const st = D.stages.find(s => s.id === r.stage) || { teams: [] };
+    return `<div class="step"><div class="num">${k + 1}</div><div class="card">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><h3 style="margin:0">${esc(st.name || r.stage)}</h3>${st.teams.filter(id => T[id]).map(id => `<a class="pill ${rag(id)}" href="#/team/${id}">${T[id].short} ${RAGTXT[rag(id)]}</a>`).join("")}</div>
+      <p style="margin:6px 0">${esc(r.goal)}</p>
+      <div class="cols3 small"><div><b>Takes</b><ul class="tight">${r.inputs.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div><div><b>Gives</b><ul class="tight">${r.outputs.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div><div><b>Watch out</b><ul class="tight">${(r.pitfalls || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div></div>
+      <div class="byte small"><b>Gate.</b> ${esc(r.gate)}</div>
+      <div class="prompt"><button onclick="navigator.clipboard&&navigator.clipboard.writeText(this.parentNode.dataset.p);this.textContent='copied'">copy</button>${esc(r.agent)}</div>
+    </div></div>`; }).join("")}`;
+}
+
+function agentDiagram() {
+  const st = D.stages, W = 108, gap = 8, x0 = 12, w = x0 * 2 + st.length * (W + gap) - gap;
+  const boxes = st.map((s, k) => { const x = x0 + k * (W + gap); const worst = s.teams.filter(id => T[id]).map(rag).sort((a, b) => ["red", "amber", "green"].indexOf(a) - ["red", "amber", "green"].indexOf(b))[0] || "green";
+    return `<g><line x1="${w / 2}" y1="44" x2="${x + W / 2}" y2="86" stroke="var(--line)"/><rect x="${x}" y="86" width="${W}" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/>
+    <circle cx="${x + 12}" cy="100" r="4" fill="var(--${worst})"/><text x="${x + 22}" y="104" style="fill:var(--ink);font-weight:600">${esc(s.name.replace(/^\d+\.\s*/, ""))}</text><text x="${x + 10}" y="121">${s.teams.map(id => "G" + Number(id)).join(" ")}</text>
+    ${k < st.length - 1 ? `<path d="M${x + W} 150 L${x + W + gap} 150" stroke="var(--muted)"/>` : ""}
+    <rect x="${x + 6}" y="142" width="${W - 12}" height="16" rx="4" fill="var(--soft)"/><text x="${x + W / 2}" y="154" text-anchor="middle">contract v0/v1</text></g>`; }).join("");
+  return `<div class="scroll"><svg viewBox="0 0 ${w} 190" width="100%" style="min-width:760px;height:auto" role="img" aria-label="Orchestrator agent with one agent per stage">
+    <rect x="${w / 2 - 110}" y="8" width="220" height="36" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="${w / 2}" y="31" text-anchor="middle" style="fill:var(--accent);font-weight:600;font-size:12px">Orchestrator: plan.yaml + this tracker</text>
+    ${boxes}<text x="${x0}" y="180">Stage agents (dot = the lab team's status). Arrows at the bottom are the files one stage hands to the next.</text></svg></div>`;
+}
+
+function learnPage() {
+  const g = D.learn.glossary || [], q = (window.__lq || "").toLowerCase();
+  const shown = g.filter(x => !q || (x.term + x.byte).toLowerCase().includes(q));
+  return `<h1>Learn: the process and the ideas</h1>
+  <p class="lede">Short notes. The principles explain why the lab is run the way it is; the glossary explains the ideas each team works on. Both live in <code>tracker/learn.yaml</code>: add a note each time you learn something.</p>
+  <h2>How the lab works</h2>
+  <div class="grid notes">${(D.learn.principles || []).map(p => `<div class="card"><h3>${esc(p.title)}</h3><p class="small" style="margin:0">${esc(p.byte)}</p></div>`).join("")}</div>
+  <h2>How to read this tracker</h2>
+  <div class="card small"><ul class="tight">
+    <li><b>Status</b> is computed, not typed. <span class="pill red">needs help</span>: a planned task is late, 3 or more PRs are past 3 days, or nothing merged in 7 days with 2 or more PRs open. <span class="pill amber">watch</span>: any other warning. <span class="pill green">on track</span>: none.</li>
+    <li><b>A task is done</b> when its file is on main (and contains the <code>check</code> text, when one is given). In review when an open PR touches that file.</li>
+    <li><b>Team of a PR</b> comes from the files it changes, not from its title. A PR that changes two team folders counts for both.</li>
+    <li><b>Dependencies</b>: planned contracts (<code>plan.yaml</code>) versus the links the code really has. Where they disagree is where hand-offs break.</li>
+    <li><b>Open items</b> are read from sections named Open items, Risks, Next steps or Known gaps in the teams' documents: write those sections and they show up here.</li>
+  </ul>${dataFlow()}</div>
+  <h2>Glossary</h2>
+  <div class="toolbar"><input type="search" placeholder="Search terms" value="${esc(window.__lq || "")}" oninput="window.__lq=this.value;route();setTimeout(()=>{const i=document.querySelector('main input');i.focus();i.setSelectionRange(i.value.length,i.value.length)})"></div>
+  <div class="grid notes">${shown.map(x => `<div class="card"><h3>${esc(x.term)} <a class="pill" href="#/team/${x.team}">${T[x.team] ? T[x.team].short : ""}</a></h3><p class="small" style="margin:0">${esc(x.byte)}</p></div>`).join("")}</div>`;
+}
+
+function dataFlow() {
+  const src = [["upstream/main", "files, docs, tests, TODOs"], ["refs/pull/*", "files each PR changes"], ["GitHub API", "titles, states, comments"], ["plan.yaml", "weeks, tasks, contracts"], ["learn.yaml", "notes, runbook"]];
+  return `<div class="scroll" style="margin-top:12px"><svg viewBox="0 0 640 200" width="640" height="200" role="img" aria-label="How the tracker gets its data">
+    ${src.map(([a, b], k) => `<rect x="4" y="${6 + k * 38}" width="190" height="32" rx="7" fill="var(--soft)"/><text x="14" y="${20 + k * 38}" style="fill:var(--ink);font-weight:600">${a}</text><text x="14" y="${33 + k * 38}">${b}</text><path d="M194 ${22 + k * 38} C 250 ${22 + k * 38}, 250 100, 290 100" fill="none" stroke="var(--line)" stroke-width="1.5"/>`).join("")}
+    <rect x="290" y="78" width="140" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="360" y="98" text-anchor="middle" style="fill:var(--accent);font-weight:600">build.py</text><text x="360" y="113" text-anchor="middle">joins, checks, scores</text>
+    <path d="M430 100 L480 100" stroke="var(--muted)" stroke-width="1.5"/><rect x="480" y="78" width="150" height="44" rx="8" fill="var(--panel)" stroke="var(--line)"/><text x="555" y="98" text-anchor="middle" style="fill:var(--ink);font-weight:600">out/index.html</text><text x="555" y="113" text-anchor="middle">one file, data inside</text>
+  </svg></div>`;
+}
+
+function allPrs() {
+  const f = window.__pf || { state: "open", team: "", q: "" };
+  const list = D.prs.filter(p => (f.state === "all" || p.state === f.state) && (!f.team || p.teams.includes(f.team)) &&
+    (!f.q || (p.title + " " + p.author + " " + p.n).toLowerCase().includes(f.q.toLowerCase()))).sort((a, b) => b.n - a.n);
+  const set = (k, v) => `window.__pf=Object.assign(window.__pf||{state:'open',team:'',q:''},{${k}:${v}});route()`;
+  return `<h1>All pull requests</h1><p class="lede">${D.prs.length} PRs. Team comes from the folders each PR changes.</p>
+  <div class="toolbar"><div class="seg">${["open", "merged", "closed", "all"].map(s => `<button class="${s === f.state ? "on" : ""}" onclick="${set("state", `'${s}'`)}">${s}</button>`).join("")}</div>
+  <select onchange="${set("team", "this.value")}"><option value="">All folders</option>${[...TIDS, "diag", "lab"].map(id => `<option value="${id}" ${f.team === id ? "selected" : ""}>${teamLabel(id)}</option>`).join("")}</select>
+  <input type="search" placeholder="Title, author or number" value="${esc(f.q)}" onchange="${set("q", "this.value")}">
+  <span class="small muted">${list.length} shown</span></div>
+  <div class="card">${prTable(list.slice(0, 300), { team: true })}</div>`;
+}
+
+// ---------- shell
+function navHtml(cur) {
+  const link = (h, label, extra = "") => `<a href="#${h}" class="${cur === h ? "on" : ""}">${label}${extra}</a>`;
+  return `<div class="brand">${esc(D.lab.name)}</div><div class="sub">Week ${D.this_week} · main ${D.main_sha} · ${ago(D.generated)}</div>
+    ${link("/overview", "Overview")}${link("/runbook", "Runbook")}${link("/learn", "Learn")}${link("/prs", "All PRs", `<span class="n">${D.prs.filter(p => p.state === "open").length}</span>`)}
+    <div class="sep">Teams</div>
+    ${TIDS.map(id => link("/team/" + id, `<span class="dot ${rag(id)}"></span>${T[id].short} ${esc(T[id].name)}${T[id].mine ? " ★" : ""}`, `<span class="n">${T[id].signals.open || ""}</span>`)).join("")}
+    <button class="theme" onclick="const r=document.documentElement;r.dataset.theme=(r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'))==='dark'?'light':'dark';try{localStorage.setItem('theme',r.dataset.theme)}catch(e){}">Light / dark</button>`;
+}
+function route() {
+  const h = location.hash.slice(1) || "/overview";
+  const m = h.match(/^\/team\/(\w+)/);
+  const main = document.getElementById("main");
+  main.innerHTML = m && T[m[1]] ? teamPage(m[1]) : h === "/runbook" ? runbook() : h === "/learn" ? learnPage() : h === "/prs" ? allPrs() : overview();
+  document.getElementById("nav").innerHTML = navHtml(m ? "/team/" + m[1] : h);
+  document.querySelectorAll(".prompt").forEach(p => p.dataset.p = p.textContent.replace(/^copied|^copy/, ""));
+  document.querySelector("nav").classList.remove("open");
+}
+try { const th = localStorage.getItem("theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) {}
+window.addEventListener("hashchange", () => { window.__prf = "open"; route(); window.scrollTo(0, 0); });
+route();
+</script>
+</body>
+</html>

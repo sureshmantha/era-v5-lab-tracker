@@ -1,0 +1,77 @@
+# What the lab plans. Edit by hand; build.py checks every task against the repo and the PRs.
+#
+# A task is "done" when its path exists on upstream/main, "in review" when an open PR touches the path,
+# "late" when its due date has passed and it is not done, and "to do" otherwise.
+# Copy the tasks of each team from the lab plan sheet. Use roles (Member A, Lead), not names.
+# To highlight your own team, run build.py --my-team NN (or add `mine: true` to it under teams:).
+
+lab:
+  name: ERA V5 Lab
+  repo: theschoolofai/era-v5-lab
+  start: 2026-10-24          # Sat of week 1; week N starts start + 7*(N-1)
+  goal: >-
+    Build, train, evaluate, quantize and release a small multilingual (Brahmic) language model,
+    with every step reproducible from committed code.
+
+weeks:
+  1: {theme: "Data diagnosis and baselines", gate: "Gate 1: every team reproduces its baseline from committed code"}
+  2: {theme: "Version 0 of every contract", gate: "Gate 2: evidence from TSAI jobs; config v1 agreed"}
+  3: {theme: "Integration: one config, one pipeline", gate: "Gate 3 (to confirm)"}
+  4: {theme: "Main run preparation", gate: "Gate 4 (to confirm)"}
+
+# Order of stages when building a model. Each team sits in one stage.
+stages:
+  - {id: data,     name: "1. Data",            teams: ["01", "02"]}
+  - {id: tok,      name: "2. Tokenizer",       teams: ["03"]}
+  - {id: embed,    name: "3. Embedding",       teams: ["04"]}
+  - {id: arch,     name: "4. Architecture",    teams: ["05"]}
+  - {id: perf,     name: "5. Training speed",  teams: ["06"]}
+  - {id: infra,    name: "6. Training run",    teams: ["07", "08"]}
+  - {id: eval,     name: "7. Evaluation",      teams: ["09"]}
+  - {id: post,     name: "8. Post-training",   teams: ["10"]}
+  - {id: quant,    name: "9. Quantization",    teams: ["12"]}
+  - {id: release,  name: "10. Release",        teams: ["11"]}
+
+# Contracts: what one team hands to another. The tracker also measures the links it finds in the code.
+contracts:
+  - {from: "01", to: "03", what: "clean corpus sample for tokenizer training"}
+  - {from: "02", to: "03", what: "Indic and code packs, gold sets"}
+  - {from: "03", to: "04", what: "vocabulary and byte tables"}
+  - {from: "03", to: "10", what: "special token slots, chat markers"}
+  - {from: "04", to: "06", what: "KE2 embedding module and decoder"}
+  - {from: "05", to: "06", what: "config v0/v1 (shape of the model)"}
+  - {from: "06", to: "07", what: "train step, memory and speed numbers"}
+  - {from: "05", to: "07", what: "config v1 for the parallel layout"}
+  - {from: "07", to: "08", what: "metrics and events of every run"}
+  - {from: "07", to: "09", what: "checkpoint layout (COMPLETE folders)"}
+  - {from: "09", to: "05", what: "held-out scores that pick the arm"}
+  - {from: "09", to: "12", what: "eval-mini profile"}
+  - {from: "10", to: "12", what: "post-trained model"}
+  - {from: "12", to: "11", what: "quantized files with scores"}
+  - {from: "09", to: "11", what: "benchmark table for the model card"}
+
+teams:
+  "01": {name: "Data A"}
+  "02": {name: "Data B"}
+  "03": {name: "Tokenizer"}
+  "04": {name: "KE2 embedding"}
+  "05": {name: "Architecture"}
+  "06": {name: "Performance and kernels"}
+  "07": {name: "Infrastructure"}
+  "08": {name: "Monitoring and records"}
+  "09": {name: "Evaluation"}
+  "10": {name: "Post-training and agentic"}
+  "11": {name: "Release"}
+  "12": {name: "Quantization"}
+
+tasks:
+  - {team: "07", week: 2, owner: "Member B", title: "Queue rules v1: max time, devices, log and checkpoint paths, one run ID per job",
+     path: teams/07-infrastructure/docs/queue_rules_v1.md, due: 2026-11-03}
+  - {team: "07", week: 2, owner: "Member B", title: "Parallel layout v0: memory and traffic formula per layout",
+     path: teams/07-infrastructure/docs/parallel_layout_v0.md, due: 2026-11-13}
+  - {team: "07", week: 2, owner: "Member B", title: "Parallel layout: config v1 numbers (section H)",
+     path: teams/07-infrastructure/docs/parallel_layout_v0.md, due: 2026-11-14, needs: "config v1 from Team 5"}
+  - {team: "07", week: 2, owner: "Member D", title: "ckpt.py writes COMPLETE after MANIFEST.json",
+     path: teams/07-infrastructure/ckpt/ckpt.py, due: 2026-11-07, check: "COMPLETE"}   # check: the file must contain this text
+  # Example for another team (fill from the plan sheet):
+  # - {team: "09", week: 2, owner: "Member B", title: "benchmarks v1", path: teams/09-evaluation/benchmarks_v1.md, due: 2026-11-07}

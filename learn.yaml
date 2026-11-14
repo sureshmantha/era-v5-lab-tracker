@@ -1,0 +1,195 @@
+# Learning notes and the runbook. Edit by hand. build.py copies this file into the page as it is.
+# Keep each note short: one idea, why it matters, what to check.
+
+principles:
+  - {title: "One task, one PR", byte: "A small PR is reviewed in minutes and reverted in seconds. A PR that mixes two tasks waits for the slower one."}
+  - {title: "Contracts before code", byte: "Teams agree on a file format, a path and a schema first (a v0 document). Code on both sides can then be written in parallel and checked against the contract."}
+  - {title: "Numbers come from committed code", byte: "A result counts only when the code that made it is on main and anyone can rerun it. This is why the gates ask for a commit, a config and a hash."}
+  - {title: "Versioned documents: v0, v1", byte: "v0 is the first shape, written to be argued with. v1 is what the next team builds on. Never change v1 silently: write v2."}
+  - {title: "The 3-day rule", byte: "A PR open for more than 3 days is a signal: too big, blocked, or not reviewed. Split it, ask for help, or close it."}
+  - {title: "Determinism", byte: "Fixed seeds, deterministic kernels, one thread on CPU. If two runs of the same code differ, no comparison between two configs can be trusted."}
+  - {title: "Save often, prove every save", byte: "A checkpoint is useful only if a restore gives the same next step. Write a manifest with hashes, then a COMPLETE marker last."}
+  - {title: "Measure before you optimise", byte: "Time each part of the training step first. The slow part is rarely the one you guess."}
+
+glossary:
+  - {term: "BPE", team: "03", byte: "Byte Pair Encoding: start from bytes, merge the most frequent pair again and again. The merges are the vocabulary."}
+  - {term: "Fertility", team: "03", byte: "Tokens per word. Lower fertility means shorter sequences, so cheaper training and longer context per token budget. Brahmic scripts often have high fertility with English-centred tokenizers."}
+  - {term: "Special tokens", team: "03", byte: "Reserved IDs (start, end, chat roles, tool calls). They are fixed early because changing them later breaks every checkpoint and dataset."}
+  - {term: "Kronecker embedding (KE)", team: "04", byte: "Instead of a vocab x d table, each token gets a fixed code built from its bytes, and a small learned projection maps it to d. Far fewer parameters for a big vocabulary."}
+  - {term: "Pre-LayerNorm", team: "05", byte: "Normalise before attention and MLP, not after. Trains more stably at depth."}
+  - {term: "GQA", team: "05", byte: "Grouped-Query Attention: several query heads share one key/value head. Smaller KV cache, nearly the same quality."}
+  - {term: "MoE", team: "05", byte: "Mixture of Experts: a router sends each token to top-k of n expert MLPs. More parameters, the same compute per token. Needs load balancing."}
+  - {term: "MTP", team: "05", byte: "Multi-Token Prediction: an extra head also predicts token t+2. A denser training signal."}
+  - {term: "BPB", team: "05", byte: "Bits per byte: loss normalised by text bytes, not tokens, so models with different tokenizers can be compared."}
+  - {term: "Muon", team: "06", byte: "An optimizer that orthogonalises the update of each 2-D weight matrix. Often used for block weights, with AdamW for embeddings, norms and biases."}
+  - {term: "Autocast / mixed precision", team: "06", byte: "Matmuls run in 16-bit, weights and optimizer state stay in fp32. Faster, with fp32 safety."}
+  - {term: "ZeRO / FSDP", team: "07", byte: "Shard optimizer state (1), gradients (2) and weights (3) across data-parallel ranks. Less memory per device, more traffic."}
+  - {term: "Tensor / pipeline parallel", team: "07", byte: "Tensor: split each matmul across devices (all-reduce per layer). Pipeline: split the layers into stages (a bubble of (p-1)/m)."}
+  - {term: "Checkpoint manifest", team: "07", byte: "A list of every shard with its hash, written after the shards. A reader trusts only folders whose manifest (and COMPLETE marker) exists."}
+  - {term: "Requeue exit code", team: "07", byte: "Exit 75 means 'stopped on purpose, restart me from the last checkpoint'. Exit 78 means 'hold, a person must look'."}
+  - {term: "Decontamination", team: "09", byte: "Remove benchmark questions from the training data, or the scores measure memory, not skill. Canary strings help detect leaks."}
+  - {term: "Eval harness", team: "09", byte: "One script, fixed prompts, fixed few-shot examples, fixed scoring. Without it two teams get two numbers for the same model."}
+  - {term: "McNemar test", team: "09", byte: "Compares two models on the same questions: did the answers that changed flip more one way than the other? Tells you if a drop is real."}
+  - {term: "SFT", team: "10", byte: "Supervised fine-tuning on chat examples. The chat format and the special tokens must match the tokenizer exactly."}
+  - {term: "GGUF / k-quants", team: "12", byte: "A file format for local inference. Q8_0 to Q2_K store weights in 8 down to about 2.6 bits. Check KL divergence and top-1 agreement against bf16, not only benchmark scores."}
+  - {term: "Model card", team: "11", byte: "What the model is, what data it saw, the licences, the scores, the known risks. Written from the evidence the other teams committed."}
+
+# The runbook: how to build a small language model from nothing, stage by stage, with agents.
+# Each stage: what it takes, what it gives, the gate that proves it, and a prompt for an agent.
+runbook:
+  - stage: data
+    goal: "A clean, licensed, deduplicated corpus with known quality per source."
+    inputs: ["raw web and code dumps", "a list of quality problems (the 'diseases')"]
+    outputs: ["labelled sample per pack", "cleaning spec v1 with rules and harm tests", "gold sets"]
+    gate: "The cleaning rules reproduce the gold labels; the harm test shows the rules do not remove good text."
+    agent: >-
+      You are the data agent. Read 300 documents from <pack>. Label each clean / fix / drop with the reason
+      from DISEASES.md. Then write rules that would make the same decisions, and a test that measures how many
+      clean documents the rules would wrongly drop. Report the confusion table.
+    pitfalls: ["Personal data in evidence notes", "Rules tuned on the same rows they are scored on", "One language checked, ten shipped"]
+  - stage: tok
+    goal: "A tokenizer with low fertility on every target script and fixed special slots."
+    inputs: ["corpus sample v0", "list of languages and scripts"]
+    outputs: ["tokenizer files with a sha256", "fertility table per language", "special token map"]
+    gate: "A fresh rebuild from committed code gives the same sha256."
+    agent: >-
+      You are the tokenizer agent. Train BPE candidates C1..C3 on the sample. For each, report fertility per
+      language on FLORES, the vocab size, and the sha256 of the files. Rebuild once from a clean checkout and
+      confirm the hash. Do not change the reserved special slots.
+    pitfalls: ["Changing special tokens after models were trained", "Comparing fertility on different text"]
+  - stage: embed
+    goal: "An embedding that scales to a large vocabulary cheaply and decodes exactly."
+    inputs: ["vocabulary and byte tables"]
+    outputs: ["embedding module", "proof or test that every token has a unique code", "reference decoder"]
+    gate: "No two tokens share a code; decode(encode(x)) == x on the full vocabulary."
+    agent: >-
+      You are the embedding agent. Implement the Kronecker embedding for this vocabulary. Write a test that
+      checks every token code is unique and a reference decoder. Report parameter count against a plain table.
+    pitfalls: ["Hash collisions found only at full vocab", "CPU and GPU giving different codes"]
+  - stage: arch
+    goal: "A model shape (config v1) chosen by experiments, not by taste."
+    inputs: ["tokenizer", "embedding", "held-out set"]
+    outputs: ["config v0 and v1", "experiment plan with arms and a scoring rule", "held-out BPB per arm"]
+    gate: "Every arm runs from a YAML file; the winner is picked by the rule written before the runs."
+    agent: >-
+      You are the architecture agent. Write an experiment plan: arms, budget per arm, the metric (held-out BPB),
+      and the rule that picks the winner. Run each arm from its config, log metrics.jsonl, and fill the table.
+    pitfalls: ["Changing the scoring rule after seeing results", "Arms that differ in more than one thing"]
+  - stage: perf
+    goal: "A training step that is correct and as fast as the budget needs."
+    inputs: ["config v1", "model code"]
+    outputs: ["step timer per part", "correctness checks fast vs reference", "baseline tokens per second"]
+    gate: "The fast path matches the reference within tolerance; baseline numbers come from perfkit on committed code."
+    agent: >-
+      You are the performance agent. Time forward, backward, optimizer and data for one step. Find the largest
+      part. Make it faster, then prove the result matches the slow reference within the stated tolerance.
+    pitfalls: ["Timing without synchronising the device", "Fast code that is silently wrong"]
+  - stage: infra
+    goal: "A long run that survives failures without losing paid hours."
+    inputs: ["train step", "config v1", "device budget"]
+    outputs: ["checkpoint layout and manifest", "queue rules (time, devices, paths, run ID)", "restore test", "parallel layout with memory and traffic", "health checks", "metrics"]
+    gate: "A run restored from a checkpoint continues bit-for-bit; a killed job restarts by itself."
+    agent: >-
+      You are the infrastructure agent. Write the checkpoint layout (shards, MANIFEST.json, COMPLETE last).
+      Write a restore test: train N steps, save, restore, train 1 step, and compare with an uninterrupted run.
+      Write the queue rules and a checker. Compute memory per device for each parallel layout from the config.
+    pitfalls: ["A reader picking a half-written checkpoint", "Run IDs reused", "Jobs that never stop before the time limit"]
+  - stage: eval
+    goal: "Scores that mean the same thing every time and are not contaminated."
+    inputs: ["checkpoints", "benchmark list"]
+    outputs: ["eval harness", "eval-mini profile", "decontamination report", "canary strings"]
+    gate: "The harness reproduces a reference model's published score within its error bar."
+    agent: >-
+      You are the evaluation agent. Pick benchmarks per language. Fix the prompts and scoring. Reproduce one
+      reference model. Scan the training data for each benchmark and report overlaps.
+    pitfalls: ["Different prompts per run", "Reporting differences smaller than the standard error"]
+  - stage: post
+    goal: "A model that follows the chat format and can use tools."
+    inputs: ["base checkpoint", "chat format", "licensed SFT data"]
+    outputs: ["SFT data with licences", "chat format v0", "agentic tasks"]
+    gate: "The chat template round-trips through the tokenizer; every SFT source has a licence."
+    agent: >-
+      You are the post-training agent. Write the chat format with the reserved markers. Collect SFT data and its
+      licences. Build a small agentic task set and score the base model on it.
+    pitfalls: ["Chat markers that the tokenizer splits", "Unlicensed data"]
+  - stage: quant
+    goal: "Small files for local use with a measured quality loss."
+    inputs: ["final model", "eval-mini profile"]
+    outputs: ["GGUF files Q8_0..Q2_K", "KL, top-1, perplexity and benchmark per format", "sha256 per file"]
+    gate: "Each format has a hash and a quality table; drops are tested for significance."
+    agent: >-
+      You are the quantization agent. Convert to GGUF, quantize to each format, and measure perplexity, KL vs
+      bf16, top-1 agreement and eval-mini. Mark drops with McNemar p < 0.01.
+    pitfalls: ["Parts the converter does not support (custom embedding, attention)", "Benchmarks too small to show a drop"]
+  - stage: release
+    goal: "A release anyone can trust and reproduce."
+    inputs: ["model files", "evaluation table", "licences", "data card"]
+    outputs: ["model card", "public vs internal list", "consent and licence notes"]
+    gate: "Every number in the card links to a committed file."
+    agent: >-
+      You are the release agent. Write the model card from committed evidence only. List what is public and
+      what stays internal. Check every licence.
+    pitfalls: ["Numbers copied from chat instead of files"]
+
+# Per team: why it exists, what to watch on its page, and how you would do it alone with agents.
+teams:
+  "01":
+    mission: "Find what is wrong with the raw text and write rules that fix it."
+    why: "Data quality decides model quality more than any architecture change. Every later team trains on what this team keeps."
+    watch: ["spec_v1 rules and their harm tests", "gold sets: are they balanced across sources?", "diagnosis PR counts per student"]
+    redo: "One agent per pack labels a sample; a second agent writes rules from the labels; a third scores the rules on held-back labels."
+  "02":
+    mission: "Indic and code-adjacent packs: gold sets, translation checks, per-pack harm tests."
+    why: "Low-resource languages need their own checks; a rule that works for English can delete good Telugu."
+    watch: ["gold set per pack", "agreement tables", "harm test per pack"]
+    redo: "Give the data agent one language at a time, with a native-speaker review step for the gold set."
+  "03":
+    mission: "Build the tokenizer: candidates, fertility, special slots, reproducible builds."
+    why: "The tokenizer fixes sequence length (cost) and what the model can even see. It is the hardest thing to change later."
+    watch: ["candidate comparison (COMPARE.md)", "sha256 of rebuilds (Gate 2 evidence)", "special token map"]
+    redo: "Agent trains 3 candidates, reports fertility per language, rebuilds from a clean checkout to prove the hash."
+  "04":
+    mission: "Kronecker embedding v2: byte tables, the encode proof, the reference decoder."
+    why: "With a big multilingual vocabulary the embedding table dominates parameters; KE replaces it with codes and a small projection."
+    watch: ["proof.md and its numerical checks", "determinism on CPU", "decode_ref contract with Team 6"]
+    redo: "Agent writes the encoder, a property test for uniqueness, and a decoder; a second agent reviews the proof."
+  "05":
+    mission: "Choose the model shape by experiment: arms, held-out set, scoring rule, config v1."
+    why: "Config v1 is the contract every other team sizes against (memory, speed, eval)."
+    watch: ["plan_v1.md arms and scoring rule", "configs/ per arm", "held-out BPB results"]
+    redo: "Agent writes the plan first and commits it; then runs arms; the winner is computed by a script, not chosen."
+  "06":
+    mission: "Make the training step fast and prove it is still correct."
+    why: "Speed sets how many tokens the budget buys. Correctness checks stop fast-but-wrong kernels."
+    watch: ["perfkit timings per part", "correctness framework results", "configs/base.yaml"]
+    redo: "Agent profiles one step, optimises the top part, and must pass the reference comparison before the PR."
+  "07":
+    mission: "Checkpoints, job queue, node health and the parallel layout for the main run."
+    why: "Long runs fail. This team makes sure a failure costs minutes, not days, and that memory fits before the run starts."
+    watch: ["restore test result", "queue rules v1 and the checker", "parallel layout numbers on config v1", "COMPLETE marker adoption"]
+    redo: "Agent 1 writes the checkpoint format and restore test; agent 2 the queue rules and checker; agent 3 the memory and traffic model from the config."
+  "08":
+    mission: "Metrics and records: what is logged, and trackers that show the state of the lab."
+    why: "If it is not recorded, it did not happen. Monitoring turns logs into decisions."
+    watch: ["metric_list_v0.yaml", "diagnosis tracker results", "viewer"]
+    redo: "Agent defines the metric list with thresholds (LOW / MEDIUM / HIGH and the action for each), then builds the tracker."
+  "09":
+    mission: "Benchmarks, harness, decontamination and canaries."
+    why: "Every decision (which arm, which quant format, release or not) is only as good as the evaluation."
+    watch: ["benchmarks_v1.md", "eval-mini schema", "rotation checks", "decontam reports"]
+    redo: "Agent reproduces a reference model's score first; only then evaluates lab models."
+  "10":
+    mission: "Post-training: licences, special tokens, chat format, agentic SWE tasks."
+    why: "A base model completes text; post-training makes it follow instructions and use tools."
+    watch: ["chat-format", "licences", "swe-task set"]
+    redo: "Agent drafts the chat format against the tokenizer's reserved slots and tests the round trip."
+  "11":
+    mission: "Release: style, model card, public vs internal, consent."
+    why: "A release without evidence and licences cannot be used by anyone else."
+    watch: ["public_internal.md", "consent_form.md", "style guide"]
+    redo: "Agent writes the model card only from committed files and links each number to its source."
+  "12":
+    mission: "Quantize to GGUF and measure the quality cost of each format."
+    why: "Most people will run the model locally in 4 bits; the team shows what that costs."
+    watch: ["format table (size, scores, KL, top-1)", "unsupported_parts.md", "sha256 per output"]
+    redo: "Agent converts, quantizes, evaluates each format and marks significant drops; a second agent lists unsupported parts."
